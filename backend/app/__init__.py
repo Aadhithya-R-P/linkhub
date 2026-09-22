@@ -1,0 +1,1 @@
+"""LinkHub backend application package."""
