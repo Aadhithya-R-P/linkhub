@@ -20,6 +20,12 @@ class Settings(BaseSettings):
     # Required server-side secret; never generate a new key on each startup.
     jwt_secret: SecretStr = Field(min_length=32)
     access_token_minutes: int = Field(default=15, ge=1, le=60)
+    refresh_token_days: int = Field(default=7, ge=1, le=30)
+    # Local HTTP development only. Enable Secure cookies for HTTPS deployment.
+    refresh_cookie_secure: bool = False
+    auth_allowed_origins: list[str] = [
+        "http://127.0.0.1:8000", "http://localhost:8000",
+    ]
 
     def get_database_url(self) -> URL:
         return URL.create(

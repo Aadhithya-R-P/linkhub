@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
+import hashlib
 import secrets
 
 import jwt
@@ -8,6 +9,15 @@ from pwdlib import PasswordHash
 from app.config import Settings
 
 password_hasher = PasswordHash.recommended()
+
+
+def create_refresh_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_refresh_token(token: str) -> str:
+    # Random 256-bit tokens do not need the slow password hashing used for passwords.
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 
 def hash_password(password: str) -> str:
