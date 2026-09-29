@@ -1,13 +1,13 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Response, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import Link, User
-from app.schemas.link import LinkCreate, LinkPage, LinkRead
-from app.services.links import create_link, list_links
+from app.schemas.link import LinkCreate, LinkPage, LinkRead, LinkUpdate
+from app.services.links import create_link, list_links, update_link
 from app.short_codes import MAX_LINK_ID, encode_link_id
 
 router = APIRouter(prefix="/api/links", tags=["links"])
@@ -47,4 +47,18 @@ def create(
     session: Annotated[Session, Depends(get_db)],
 ):
     link = create_link(session, data, user.id)
+    return link_response(link)
+
+@router.patch("/{link_id}", response_model=LinkRead, status_code=status.HTTP_200_OK)
+def update(
+    link_id: Annotated[int, Path(ge=1, le=MAX_LINK_ID)],
+    data: LinkUpdate,
+    response: Response,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_db)],
+):
+    link = update_link(link_id, session, data, user.id)
+    if link is None:
+        raise HTTPException(status_code=404, detail="Link not found")
+    response.headers["Cache-Control"] = "no-store"
     return link_response(link)

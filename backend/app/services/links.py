@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Link
-from app.schemas.link import LinkCreate
+from app.schemas.link import LinkCreate, LinkUpdate
 from app.short_codes import decode_short_code
 
 
@@ -41,3 +41,22 @@ def get_redirect_destination(session: Session, short_code: str) -> str | None:
     if link.expires_at is not None and link.expires_at <= datetime.now(timezone.utc):
         return None
     return link.destination_url
+
+
+def update_link(link_id: int, session: Session, data: LinkUpdate, user_id: int) -> Link | None:
+    statement = select(Link).where(Link.user_id == user_id).where(Link.id == link_id)
+    row = session.execute(statement).scalar_one_or_none()
+    if row is None:
+        return None
+    # Presence matters: an explicit null clears expiration, but omission preserves it.
+    if "destination_url" in data.model_fields_set:
+        row.destination_url = str(data.destination_url)
+    if "is_active" in data.model_fields_set:
+        row.is_active = data.is_active
+    if "expires_at" in data.model_fields_set:
+        row.expires_at = (
+            data.expires_at.astimezone(timezone.utc) if data.expires_at is not None else None
+        )
+    session.commit()
+    session.refresh(row)
+    return row

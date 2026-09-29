@@ -185,3 +185,117 @@ def test_list_requires_access_token(link_owner, headers):
     response = client.get("/api/links", headers=headers)
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
+
+
+@pytest.fixture
+def editable_link(link_owner):
+    client, connection, user_id, headers = link_owner
+    response = client.post("/api/links", json={"destination_url": "https://example.com/original"}, headers=headers)
+    assert response.status_code == 201
+    return client, connection, user_id, headers, response.json()
+
+
+def test_update_destination_preserves_identity_and_changes_redirect(editable_link):
+    client, connection, user_id, headers, original = editable_link
+    response = client.patch(f"/api/links/{original['id']}", headers=headers,
+                            json={"destination_url": "http://EXAMPLE.org/new?q=1#section"})
+    assert response.status_code == 200
+    assert response.headers["cache-control"] == "no-store"
+    expected = {**original, "destination_url": "http://example.org/new?q=1#section"}
+    assert response.json() == expected
+    stored = connection.execute(select(Link.__table__).where(Link.id == original["id"])).mappings().one()
+    assert stored["user_id"] == user_id
+    assert stored["destination_url"] == expected["destination_url"]
+    redirect = client.get(f"/r/{original['short_code']}", follow_redirects=False)
+    assert redirect.status_code == 302
+    assert redirect.headers["location"] == expected["destination_url"]
+
+
+def test_disable_and_reenable_link(editable_link):
+    client, _, _, headers, original = editable_link
+    path = f"/api/links/{original['id']}"
+    for active, redirect_status in [(False, 404), (True, 302)]:
+        response = client.patch(path, json={"is_active": active}, headers=headers)
+        assert response.status_code == 200
+        assert response.json() == {**original, "is_active": active}
+        assert client.get(f"/r/{original['short_code']}", follow_redirects=False).status_code == redirect_status
+
+
+def test_expiration_preserved_on_reenable_and_null_clears_it(editable_link):
+    client, connection, _, headers, original = editable_link
+    path = f"/api/links/{original['id']}"
+    expiration = "2000-01-01T05:30:00+05:30"
+    response = client.patch(path, json={"expires_at": expiration, "is_active": False}, headers=headers)
+    assert response.status_code == 200
+    assert connection.execute(select(Link.expires_at).where(Link.id == original["id"])).scalar_one() == datetime(2000, 1, 1, tzinfo=timezone.utc)
+    response = client.patch(path, json={"is_active": True}, headers=headers)
+    assert response.status_code == 200
+    assert response.json()["expires_at"] is not None
+    redirect_path = f"/r/{original['short_code']}"
+    assert client.get(redirect_path, follow_redirects=False).status_code == 404
+    response = client.patch(path, json={"expires_at": None}, headers=headers)
+    assert response.status_code == 200
+    assert response.json() == original
+    assert connection.execute(select(Link.expires_at).where(Link.id == original["id"])).scalar_one() is None
+    assert client.get(redirect_path, follow_redirects=False).status_code == 302
+
+
+def test_future_expiration_and_empty_patch(editable_link):
+    client, _, _, headers, original = editable_link
+    path = f"/api/links/{original['id']}"
+    future = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+    response = client.patch(path, json={"expires_at": future}, headers=headers)
+    assert response.status_code == 200
+    assert client.get(f"/r/{original['short_code']}", follow_redirects=False).status_code == 302
+    noop = client.patch(path, json={}, headers=headers)
+    assert noop.status_code == 200
+    assert noop.json() == response.json()
+
+
+def test_update_missing_and_unowned_link(editable_link):
+    client, connection, _, headers, original = editable_link
+    other_id = connection.execute(insert(User).values(
+        email=f"{uuid4().hex}@example.com", password_hash="unused",
+    ).returning(User.id)).scalar_one()
+    other_link = insert_owned_links(connection, other_id, 1)[0]
+    response = client.patch(f"/api/links/{other_link}", json={"is_active": False}, headers=headers)
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Link not found"}
+    assert connection.execute(select(Link.is_active).where(Link.id == other_link)).scalar_one() is True
+    connection.execute(delete(Link).where(Link.id == original["id"]))
+    missing = client.patch(f"/api/links/{original['id']}", json={}, headers=headers)
+    assert missing.status_code == 404
+    assert missing.json() == response.json()
+
+
+@pytest.mark.parametrize("payload", [
+    {"destination_url": None}, {"destination_url": "invalid"},
+    {"destination_url": "ftp://example.com"}, {"destination_url": "https://user:secret@example.com"},
+    {"destination_url": "https://example.com/" + "x" * 2083},
+    {"is_active": None}, {"is_active": "false"}, {"is_active": 0},
+    {"expires_at": "2030-01-01T00:00:00"}, {"expires_at": "invalid"},
+    {"id": 1}, {"user_id": 1}, {"short_code": "custom"},
+])
+def test_invalid_patch_does_not_change_row(editable_link, payload):
+    client, connection, _, headers, original = editable_link
+    query = select(Link.__table__).where(Link.id == original["id"])
+    before = connection.execute(query).mappings().one()
+    response = client.patch(f"/api/links/{original['id']}", json=payload, headers=headers)
+    assert response.status_code == 422
+    assert connection.execute(query).mappings().one() == before
+    assert all("input" not in error for error in response.json()["detail"])
+
+
+@pytest.mark.parametrize("link_id", ["0", "-1", "2147483648", "abc"])
+def test_patch_validates_path_id(link_owner, link_id):
+    client, _, _, headers = link_owner
+    assert client.patch(f"/api/links/{link_id}", json={}, headers=headers).status_code == 422
+
+
+@pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer invalid"}])
+def test_patch_requires_access_token(editable_link, headers):
+    client, connection, _, _, original = editable_link
+    response = client.patch(f"/api/links/{original['id']}", json={"is_active": False}, headers=headers)
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert connection.execute(select(Link.is_active).where(Link.id == original["id"])).scalar_one() is True
