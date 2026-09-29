@@ -23,3 +23,8 @@ class LinkRead(BaseModel):
     created_at: datetime
     is_active: bool
     expires_at: datetime | None
+
+
+class LinkPage(BaseModel):
+    items: list[LinkRead]
+    next_before_id: int | None
