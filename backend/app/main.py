@@ -3,9 +3,11 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 
 from app.routes.auth import router as auth_router
+from app.routes.links import router as links_router
 
 app = FastAPI()
 app.include_router(auth_router)
+app.include_router(links_router)
 
 
 @app.exception_handler(RequestValidationError)
