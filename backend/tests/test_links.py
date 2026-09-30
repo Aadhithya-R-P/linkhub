@@ -299,3 +299,74 @@ def test_patch_requires_access_token(editable_link, headers):
     assert response.status_code == 401
     assert response.headers["www-authenticate"] == "Bearer"
     assert connection.execute(select(Link.is_active).where(Link.id == original["id"])).scalar_one() is True
+
+
+@pytest.mark.parametrize("state", ["active", "inactive", "expired"])
+def test_delete_removes_row_listing_and_redirect(editable_link, state):
+    client, connection, user_id, headers, original = editable_link
+    link_id = original["id"]
+    sibling = insert_owned_links(connection, user_id, 1)[0]
+    redirect_path = f"/r/{original['short_code']}"
+    assert client.get(redirect_path, follow_redirects=False).status_code == 302
+    if state == "inactive":
+        connection.execute(update(Link).where(Link.id == link_id).values(is_active=False))
+    elif state == "expired":
+        connection.execute(update(Link).where(Link.id == link_id).values(
+            expires_at=datetime.now(timezone.utc) - timedelta(days=1),
+        ))
+
+    response = client.delete(f"/api/links/{link_id}", headers=headers)
+    assert response.status_code == 204
+    assert response.content == b""
+    assert response.headers["cache-control"] == "no-store"
+    assert connection.execute(select(Link.id).where(Link.id == link_id)).scalar_one_or_none() is None
+    page = client.get("/api/links", headers=headers).json()
+    assert [item["id"] for item in page["items"]] == [sibling]
+    redirect = client.get(redirect_path, follow_redirects=False)
+    assert redirect.status_code == 404
+    assert redirect.json() == {"detail": "Link not found"}
+    assert redirect.headers["cache-control"] == "no-store"
+    assert client.patch(f"/api/links/{link_id}", json={"is_active": True}, headers=headers).status_code == 404
+
+    repeated = client.delete(f"/api/links/{link_id}", headers=headers)
+    assert repeated.status_code == 404
+    assert repeated.json() == {"detail": "Link not found"}
+    assert repeated.headers["cache-control"] == "no-store"
+    replacement = client.post("/api/links", headers=headers,
+                              json={"destination_url": original["destination_url"]})
+    assert replacement.status_code == 201
+    assert replacement.json()["id"] > link_id
+    assert replacement.json()["short_code"] != original["short_code"]
+    assert client.get(redirect_path, follow_redirects=False).status_code == 404
+
+
+def test_delete_unowned_link_is_hidden_and_preserved(editable_link):
+    client, connection, _, headers, original = editable_link
+    other_id = connection.execute(insert(User).values(
+        email=f"{uuid4().hex}@example.com", password_hash="unused",
+    ).returning(User.id)).scalar_one()
+    other_link = insert_owned_links(connection, other_id, 1)[0]
+    query = select(Link.__table__).where(Link.id == other_link)
+    before = connection.execute(query).mappings().one()
+    response = client.delete(f"/api/links/{other_link}", headers=headers)
+    assert response.status_code == 404
+    assert response.json() == {"detail": "Link not found"}
+    assert connection.execute(query).mappings().one() == before
+    assert connection.execute(select(Link.id).where(Link.id == original["id"])).scalar_one() == original["id"]
+
+
+@pytest.mark.parametrize("link_id", ["0", "-1", "2147483648", "abc", "1.5"])
+def test_delete_validates_path_id(editable_link, link_id):
+    client, connection, _, headers, original = editable_link
+    response = client.delete(f"/api/links/{link_id}", headers=headers)
+    assert response.status_code == 422
+    assert connection.execute(select(Link.id).where(Link.id == original["id"])).scalar_one() == original["id"]
+
+
+@pytest.mark.parametrize("headers", [{}, {"Authorization": "Bearer invalid"}])
+def test_delete_requires_access_token(editable_link, headers):
+    client, connection, _, _, original = editable_link
+    response = client.delete(f"/api/links/{original['id']}", headers=headers)
+    assert response.status_code == 401
+    assert response.headers["www-authenticate"] == "Bearer"
+    assert connection.execute(select(Link.id).where(Link.id == original["id"])).scalar_one() == original["id"]

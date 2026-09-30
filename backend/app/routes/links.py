@@ -7,10 +7,22 @@ from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import Link, User
 from app.schemas.link import LinkCreate, LinkPage, LinkRead, LinkUpdate
-from app.services.links import create_link, list_links, update_link
+from app.services.links import create_link, delete_link, list_links, update_link
 from app.short_codes import MAX_LINK_ID, encode_link_id
 
 router = APIRouter(prefix="/api/links", tags=["links"])
+
+
+@router.delete("/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_owned_link(
+    link_id: Annotated[int, Path(ge=1, le=MAX_LINK_ID)],
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[Session, Depends(get_db)],
+):
+    headers = {"Cache-Control": "no-store"}
+    if not delete_link(session, link_id, user.id):
+        raise HTTPException(status_code=404, detail="Link not found", headers=headers)
+    return Response(status_code=status.HTTP_204_NO_CONTENT, headers=headers)
 
 
 def link_response(link: Link) -> LinkRead:

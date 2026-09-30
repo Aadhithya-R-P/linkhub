@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models import Link
@@ -28,6 +28,16 @@ def create_link(session: Session, data: LinkCreate, user_id: int) -> Link:
     session.commit()
     session.refresh(link)
     return link
+
+
+def delete_link(session: Session, link_id: int, user_id: int) -> bool:
+    # Check ownership and remove the row in one database statement.
+    statement = delete(Link).where(
+        Link.id == link_id, Link.user_id == user_id,
+    ).returning(Link.id)
+    deleted_id = session.execute(statement).scalar_one_or_none()
+    session.commit()
+    return deleted_id is not None
 
 
 def get_redirect_destination(session: Session, short_code: str) -> str | None:
