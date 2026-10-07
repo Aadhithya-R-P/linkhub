@@ -97,3 +97,21 @@ def test_deleted_user_token_rejected(registration_client):
     token = create_access_token(user["id"], Settings())
     connection.execute(delete(User).where(User.id == user["id"]))
     assert client.get("/api/auth/me", headers={"Authorization": f"Bearer {token}"}).status_code == 401
+
+
+@pytest.mark.parametrize("origin", ["http://127.0.0.1:5173", "http://localhost:5173"])
+def test_frontend_origin_login_refresh_logout(registration_client, origin):
+    client, _ = registration_client
+    payload, user = register(client)
+    headers = {"Origin": origin, "Sec-Fetch-Site": "same-origin"}
+    login = client.post("/api/auth/login", json=payload, headers=headers)
+    assert login.status_code == 200
+    refreshed = client.post("/api/auth/refresh", headers=headers)
+    assert refreshed.status_code == 200
+    me = client.get("/api/auth/me", headers={
+        "Authorization": f"Bearer {refreshed.json()['access_token']}",
+    })
+    assert me.status_code == 200
+    assert me.json()["id"] == user["id"]
+    assert client.post("/api/auth/logout", headers=headers).status_code == 204
+    assert client.post("/api/auth/refresh", headers=headers).status_code == 401
