@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import Dashboard from './Dashboard.jsx'
 import Registration from './Registration.jsx'
 import { auth } from './auth.js'
 
@@ -7,6 +8,14 @@ export default function App() {
   const [user, setUser] = useState(null)
   const [error, setError] = useState('')
   const [pending, setPending] = useState(false)
+
+  // Dashboard’s own state changes do not rerender App. The stable callback matters when App itself rerenders while Dashboard remains mounted.
+  const handleSessionExpired = useCallback(() => {
+    auth.clearLocalSession()
+    setUser(null)
+    setError('Your session has expired. Please sign in again.')
+    setView('login')
+  }, [])
 
   useEffect(() => {
     let active = true
@@ -47,19 +56,14 @@ export default function App() {
   }
 
   if (view === 'register') return <Registration onLogin={() => { setError(''); setView('login') }} />
+  if (view === 'account') return <Dashboard user={user} onLogout={logout} onSessionExpired={handleSessionExpired} />
 
   return <div className="page">
     <header className="brand"><span className="brand-mark" aria-hidden="true">↗</span> LinkHub</header>
     <main className="auth-layout">
       <section className="card" aria-labelledby="auth-title">
         {view === 'loading' ? <h1 id="auth-title" role="status">Restoring your session…</h1> :
-          view === 'account' ? <>
-            <p className="eyebrow">YOUR ACCOUNT</p>
-            <h1 id="auth-title">Welcome, {user.display_name || 'link keeper'}.</h1>
-            <p>{user.email}</p>
-            <p className="muted">You are signed in. Link management is the next step.</p>
-            <button onClick={logout}>Sign out</button>
-          </> : view === 'logout' ? <>
+          view === 'logout' ? <>
             <h1 id="auth-title">Signing out</h1>
             <p role="status">{pending ? 'Ending your session…' : 'Your local session has been cleared.'}</p>
             {!pending && <button onClick={logout}>Retry logout</button>}

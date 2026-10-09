@@ -4,12 +4,31 @@ import { beforeEach, expect, test, vi } from 'vitest'
 import { StrictMode } from 'react'
 import App from './App.jsx'
 import { auth } from './auth.js'
+import { links, SessionExpiredError } from './links.js'
+
+vi.mock('./links.js', async (importOriginal) => {
+  const original = await importOriginal()
+  return { ...original, links: { list: vi.fn() } }
+})
 
 vi.mock('./auth.js', async (importOriginal) => {
   const original = await importOriginal()
-  return { ...original, auth: { restore: vi.fn(), login: vi.fn(), logout: vi.fn() } }
+  return { ...original, auth: { restore: vi.fn(), login: vi.fn(), logout: vi.fn(), clearLocalSession: vi.fn() } }
 })
-beforeEach(() => { vi.resetAllMocks(); auth.restore.mockResolvedValue(null) })
+beforeEach(() => {
+  vi.resetAllMocks()
+  auth.restore.mockResolvedValue(null)
+  links.list.mockResolvedValue({ items: [], next_before_id: null })
+})
+
+test('an expired dashboard session clears local credentials and returns to login', async () => {
+  auth.restore.mockResolvedValue({ email: 'reader@example.com' })
+  links.list.mockRejectedValue(new SessionExpiredError())
+  render(<App />)
+  expect(await screen.findByRole('alert')).toHaveTextContent('Your session has expired')
+  expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
+  expect(auth.clearLocalSession).toHaveBeenCalledTimes(1)
+})
 
 test('sign in shows account and logout clears it', async () => {
   auth.login.mockResolvedValue({ email: 'reader@example.com', display_name: 'Reader' })

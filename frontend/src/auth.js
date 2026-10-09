@@ -57,6 +57,12 @@ export class AuthClient {
     throw new RegistrationError(['Registration could not be completed. Please try again.'])
   }
 
+  // A final unauthorized response ends the local UI session.
+  clearLocalSession() {
+    this.sessionVersion += 1
+    this.accessToken = null
+  }
+
   // LOGIN: send credentials, remember the token, then load the user.
   async login(email, password) {
     if (this.pendingLogout) {

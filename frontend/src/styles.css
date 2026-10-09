@@ -6,6 +6,23 @@
 .secondary:hover { background: #e9eee2; }
 .submit { margin-top: 24px; }
 body { margin: 0; }
+.dashboard-header, .link-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.sign-out { width: auto; }
+.dashboard { padding: 40px 0; }
+.dashboard h1 { font-size: 40px; letter-spacing: -1.5px; }
+.link-list { list-style: none; padding: 0; display: grid; gap: 16px; }
+.link-card { padding: 22px; background: white; border: 1px solid #dce3d7; border-radius: 12px; min-width: 0; }
+.link-heading code { font-size: 18px; }
+.badge { background: #e2f1df; color: #184f46; border-radius: 20px; padding: 5px 12px; font-size: 12px; }
+.badge.disabled { background: #eee; color: #555; }
+.destination, .dashboard .muted { overflow-wrap: anywhere; }
+.load-more, .list-error { max-width: 260px; }
+.empty-links { margin-top: 28px; }
+.create-link { margin: 28px 0; max-width: 680px; }
+.copy-link { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 12px 0; }
+.copy-link a { color: #184f46; overflow-wrap: anywhere; min-width: 0; }
+.copy-link button { width: auto; }
+.copy-link [role="status"] { font-size: 13px; }
 .page { max-width: 1200px; margin: auto; padding: 36px 48px 24px; }
 .brand { display: flex; align-items: center; gap: 10px; font-size: 23px; font-weight: 750; letter-spacing: -1px; }
 .brand-mark { display: grid; place-items: center; background: #184f46; color: white; border-radius: 11px; width: 36px; height: 36px; }
@@ -35,3 +52,10 @@ button:disabled { opacity: .65; cursor: wait; }
 .card strong { overflow-wrap: anywhere; }
 footer { color: #63736b; font-size: 12px; border-top: 1px solid #dce3d7; padding-top: 20px; }
 @media (max-width: 760px) { .page { padding: 24px; } .layout { grid-template-columns: 1fr; gap: 28px; padding: 40px 0; } h1 { letter-spacing: -2px; } .link-example { display: none; } .card { padding: 26px; } }
+
+.link-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+.link-actions button { width: auto; }
+.danger { background: #8f2929; }
+.danger:hover { background: #702020; }
+.checkbox-label { display: flex; align-items: center; gap: 10px; }
+.checkbox-label input { width: auto; }
