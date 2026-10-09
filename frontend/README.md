@@ -62,7 +62,9 @@ The form calls `LinksClient.create()`. After success, it clears the input and re
 
 ## Editing and deleting links
 
-`LinkItem` owns each row's edit form, delete confirmation, pending state, and errors. Its uncontrolled inputs start with the current link values; canceling discards the form. `LinksClient.update(id, data)` sends PATCH through the authenticated client, and the dashboard replaces the row with the server response. Expiration editing is not included yet.
+`LinkItem` owns each row's edit form, delete confirmation, pending state, and errors. Its uncontrolled inputs start with the current link values; canceling discards the form. `LinksClient.update(id, data)` sends PATCH through the authenticated client, and the dashboard replaces the row with the server response.
+
+Expiration can be edited in the browser's local timezone with minute precision. Changed dates are converted to UTC for the API; clearing the field sends `null`. An unchanged field is omitted from the update to preserve the exact stored timestamp, including seconds. Past dates are allowed and expire the link immediately. Failed saves retain the entered date, and cancel discards it with the other edits.
 
 Delete requires an inline confirmation, then `LinksClient.delete(id)` sends DELETE and expects an empty 204 response. The dashboard removes the row and clears the creation success message if it refers to that link. This is permanent deletion; there is no undo. Both operations preserve the pagination cursor, including when the deleted row supplied that cursor.
 

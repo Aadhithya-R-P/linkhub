@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 import LinkItem from './LinkItem.jsx'
@@ -9,9 +9,9 @@ vi.mock('./links.js', async (importOriginal) => ({
 }))
 beforeEach(() => vi.resetAllMocks())
 const link = { id: 30, short_code: 'u', destination_url: 'https://example.com/', is_active: true, expires_at: null }
-function setup() {
+function setup(overrides = {}) {
   const callbacks = { onPendingChange: vi.fn(), onUpdated: vi.fn(), onDeleted: vi.fn(), onSessionExpired: vi.fn() }
-  render(<ul><LinkItem link={link} disabled={false} {...callbacks} /></ul>)
+  render(<ul><LinkItem link={{ ...link, ...overrides }} disabled={false} {...callbacks} /></ul>)
   return callbacks
 }
 
@@ -30,6 +30,58 @@ test('cancel discards edits and deletion requires explicit confirmation', async 
   await interaction.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(links.update).not.toHaveBeenCalled()
   expect(links.delete).not.toHaveBeenCalled()
+})
+
+test.each([null, '2027-01-01T00:00:00Z'])('saves a changed local expiration as UTC (previous: %s)', async (expires_at) => {
+  const saved = { ...link, expires_at: new Date(2027, 6, 15, 18, 45).toISOString() }
+  links.update.mockResolvedValue(saved)
+  const callbacks = setup({ expires_at })
+  const interaction = userEvent.setup()
+  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  fireEvent.change(screen.getByLabelText('Expiration'), { target: { value: '2027-07-15T18:45' } })
+  await interaction.click(screen.getByRole('button', { name: 'Save' }))
+  expect(links.update).toHaveBeenCalledWith(link.id, {
+    destination_url: link.destination_url, is_active: true, expires_at: saved.expires_at,
+  })
+  expect(callbacks.onUpdated).toHaveBeenCalledWith(saved)
+})
+
+test('prefills local time and omits unchanged expiration to preserve sub-minute precision', async () => {
+  const expires_at = new Date(2027, 0, 2, 0, 15, 43, 123).toISOString()
+  links.update.mockResolvedValue({ ...link, expires_at })
+  setup({ expires_at })
+  const interaction = userEvent.setup()
+  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  expect(screen.getByLabelText('Expiration')).toHaveValue('2027-01-02T00:15')
+  await interaction.click(screen.getByRole('button', { name: 'Save' }))
+  expect(links.update).toHaveBeenCalledWith(link.id, { destination_url: link.destination_url, is_active: true })
+})
+
+test('clears existing expiration with null', async () => {
+  links.update.mockResolvedValue(link)
+  setup({ expires_at: '2027-01-01T00:00:00Z' })
+  const interaction = userEvent.setup()
+  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  fireEvent.change(screen.getByLabelText('Expiration'), { target: { value: '' } })
+  await interaction.click(screen.getByRole('button', { name: 'Save' }))
+  expect(links.update).toHaveBeenCalledWith(link.id, {
+    destination_url: link.destination_url, is_active: true, expires_at: null,
+  })
+})
+
+test('past expiration is allowed, retained after failure, and discarded on cancel', async () => {
+  links.update.mockRejectedValue(new Error('Unable to confirm the update'))
+  setup()
+  const interaction = userEvent.setup()
+  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  fireEvent.change(screen.getByLabelText('Expiration'), { target: { value: '2000-01-01T12:00' } })
+  await interaction.click(screen.getByRole('button', { name: 'Save' }))
+  expect(await screen.findByRole('alert')).toHaveTextContent('Unable to confirm')
+  expect(screen.getByLabelText('Expiration')).toHaveValue('2000-01-01T12:00')
+  expect(links.update).toHaveBeenCalledWith(link.id, expect.objectContaining({ expires_at: new Date(2000, 0, 1, 12).toISOString() }))
+  await interaction.click(screen.getByRole('button', { name: 'Cancel' }))
+  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  expect(screen.getByLabelText('Expiration')).toHaveValue('')
 })
 
 test('failed save retains entered fields and can be retried', async () => {

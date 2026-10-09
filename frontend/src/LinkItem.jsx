@@ -2,6 +2,14 @@ import { useState } from 'react'
 import { links, SessionExpiredError } from './links.js'
 import CopyLink from './CopyLink.jsx'
 
+// datetime-local expects local calendar fields, not a UTC ISO string.
+function localExpiration(value) {
+  if (!value) return ''
+  const date = new Date(value)
+  const pad = (part) => String(part).padStart(2, '0')
+  return `${String(date.getFullYear()).padStart(4, '0')}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
+}
+
 export default function LinkItem({ link, disabled, onPendingChange, onUpdated, onDeleted, onSessionExpired }) {
   const [mode, setMode] = useState('view')
   const [pending, setPending] = useState(false)
@@ -20,10 +28,20 @@ export default function LinkItem({ link, disabled, onPendingChange, onUpdated, o
     onPendingChange(true)
     setError('')
     try {
-      const updated = await links.update(link.id, {
+      const changes = {
         destination_url: data.get('destination_url').trim(),
         is_active: data.get('is_active') === 'on',
-      })
+      }
+      const expiration = data.get('expires_at')
+      // Preserve stored seconds/precision when the displayed minute is unchanged.
+      if (expiration !== localExpiration(link.expires_at)) {
+        const date = expiration ? new Date(expiration) : null
+        if (date && (Number.isNaN(date.getTime()) || localExpiration(date) !== expiration)) {
+          throw new Error('Enter a valid expiration date and time in your local timezone.')
+        }
+        changes.expires_at = date ? date.toISOString() : null
+      }
+      const updated = await links.update(link.id, changes)
       onUpdated(updated)
       setMode('view')
     } catch (failure) {
@@ -72,6 +90,9 @@ export default function LinkItem({ link, disabled, onPendingChange, onUpdated, o
         <label className="checkbox-label">
           <input name="is_active" type="checkbox" defaultChecked={link.is_active} /> Enabled
         </label>
+        <label htmlFor={`expiration-${link.id}`}>Expiration</label>
+        <input id={`expiration-${link.id}`} name="expires_at" type="datetime-local" defaultValue={localExpiration(link.expires_at)} aria-describedby={`expiration-hint-${link.id}`} />
+        <p id={`expiration-hint-${link.id}`} className="hint">Your local time. Leave blank for no expiration. Past dates expire immediately.</p>
         <div className="link-actions">
           <button type="submit">{pending ? 'Saving…' : 'Save'}</button>
           <button type="button" onClick={() => changeMode('view')}>Cancel</button>
