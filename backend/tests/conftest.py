@@ -6,6 +6,14 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db, get_engine
 from app.main import app
+from app.redirect_cache import RedirectCache
+from app.services import links as links_service
+
+
+@pytest.fixture(autouse=True)
+def disable_external_cache(monkeypatch):
+    # Database fixtures roll back data; never put their rows into a real cache.
+    monkeypatch.setattr(links_service, "get_redirect_cache", lambda: RedirectCache(None))
 
 
 @pytest.fixture

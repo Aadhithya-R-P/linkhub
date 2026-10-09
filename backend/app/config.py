@@ -15,6 +15,10 @@ class Settings(BaseSettings):
     db_name: str
     db_user: str
     db_password: SecretStr
+    redirect_cache_enabled: bool = True
+    redis_url: SecretStr = SecretStr("redis://127.0.0.1:6379/0")
+    redirect_cache_ttl_seconds: int = Field(default=30, ge=1, le=300)
+    redis_timeout_seconds: float = Field(default=0.2, gt=0, le=5)
 
 
     # Required server-side secret; never generate a new key on each startup.

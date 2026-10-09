@@ -7,6 +7,7 @@ from app.models import ClickEvent, Link
 from app.schemas.link import LinkCreate, LinkUpdate
 from app.short_codes import decode_short_code
 from app.services.clicks import record_click
+from app.redirect_cache import get_redirect_cache
 
 
 def get_click_counts(session: Session, link_ids: list[int]) -> dict[int, int]:
@@ -48,6 +49,8 @@ def delete_link(session: Session, link_id: int, user_id: int) -> bool:
     ).returning(Link.id)
     deleted_id = session.execute(statement).scalar_one_or_none()
     session.commit()
+    if deleted_id is not None:
+        get_redirect_cache().invalidate(link_id)
     return deleted_id is not None
 
 
@@ -57,6 +60,14 @@ def get_redirect_destination(session: Session, short_code: str) -> str | None:
         link_id = decode_short_code(short_code)
     except ValueError:
         return None
+    cache = get_redirect_cache()
+    cached = cache.get(link_id)
+    if cached is not None:
+        if cached.expires_at is not None and cached.expires_at <= datetime.now(timezone.utc):
+            return None
+        destination = str(cached.destination_url)
+        record_click(session, link_id)
+        return destination
     link = session.get(Link, link_id)
     if link is None or not link.is_active:
         return None
@@ -65,6 +76,7 @@ def get_redirect_destination(session: Session, short_code: str) -> str | None:
     # Commit/rollback expires ORM attributes. Keep the destination before recording
     # so even a failed analytics write cannot trigger another database read.
     destination = link.destination_url
+    cache.put(link_id, destination, link.expires_at)
     record_click(session, link_id)
     return destination
 
@@ -84,5 +96,6 @@ def update_link(link_id: int, session: Session, data: LinkUpdate, user_id: int) 
             data.expires_at.astimezone(timezone.utc) if data.expires_at is not None else None
         )
     session.commit()
+    get_redirect_cache().invalidate(link_id)
     session.refresh(row)
     return row
