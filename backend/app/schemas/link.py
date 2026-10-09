@@ -27,6 +27,7 @@ class LinkRead(BaseModel):
     created_at: datetime
     is_active: bool
     expires_at: datetime | None
+    total_clicks: int
 
 
 class LinkPage(BaseModel):

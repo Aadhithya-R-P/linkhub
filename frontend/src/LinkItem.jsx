@@ -77,6 +77,7 @@ export default function LinkItem({ link, disabled, onPendingChange, onUpdated, o
     </div>
     <CopyLink shortCode={link.short_code} />
     <p className="destination">{link.destination_url}</p>
+    <p className="muted">{link.total_clicks} {link.total_clicks === 1 ? 'click' : 'clicks'}</p>
     <p className="muted">{link.expires_at ? `Expires: ${new Date(link.expires_at).toLocaleString()}` : 'No expiration'}</p>
 
     {mode === 'view' && <div className="link-actions">

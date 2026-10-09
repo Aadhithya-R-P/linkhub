@@ -1,12 +1,22 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
-from app.models import Link
+from app.models import ClickEvent, Link
 from app.schemas.link import LinkCreate, LinkUpdate
 from app.short_codes import decode_short_code
 from app.services.clicks import record_click
+
+
+def get_click_counts(session: Session, link_ids: list[int]) -> dict[int, int]:
+    """Count events only for already-authorized links, in one grouped query."""
+    if not link_ids:
+        return {}
+    statement = select(ClickEvent.link_id, func.count()).where(
+        ClickEvent.link_id.in_(link_ids)
+    ).group_by(ClickEvent.link_id)
+    return dict(session.execute(statement).all())
 
 
 def list_links(

@@ -7,7 +7,7 @@ from app.db import get_db
 from app.dependencies import get_current_user
 from app.models import Link, User
 from app.schemas.link import LinkCreate, LinkPage, LinkRead, LinkUpdate
-from app.services.links import create_link, delete_link, list_links, update_link
+from app.services.links import create_link, delete_link, get_click_counts, list_links, update_link
 from app.short_codes import MAX_LINK_ID, encode_link_id
 
 router = APIRouter(prefix="/api/links", tags=["links"])
@@ -25,7 +25,7 @@ def delete_owned_link(
     return Response(status_code=status.HTTP_204_NO_CONTENT, headers=headers)
 
 
-def link_response(link: Link) -> LinkRead:
+def link_response(link: Link, total_clicks: int = 0) -> LinkRead:
     return LinkRead(
         id=link.id,
         short_code=encode_link_id(link.id),
@@ -33,6 +33,7 @@ def link_response(link: Link) -> LinkRead:
         created_at=link.created_at,
         is_active=link.is_active,
         expires_at=link.expires_at,
+        total_clicks=total_clicks,
     )
 
 
@@ -45,9 +46,10 @@ def list_owned_links(
     before_id: Annotated[int | None, Query(ge=1, le=MAX_LINK_ID)] = None,
 ):
     items, next_before_id = list_links(session, user.id, limit, before_id)
+    counts = get_click_counts(session, [link.id for link in items])
     response.headers["Cache-Control"] = "no-store"
     return LinkPage(
-        items=[link_response(link) for link in items],
+        items=[link_response(link, counts.get(link.id, 0)) for link in items],
         next_before_id=next_before_id,
     )
 
@@ -73,4 +75,5 @@ def update(
     if link is None:
         raise HTTPException(status_code=404, detail="Link not found")
     response.headers["Cache-Control"] = "no-store"
-    return link_response(link)
+    counts = get_click_counts(session, [link.id])
+    return link_response(link, counts.get(link.id, 0))

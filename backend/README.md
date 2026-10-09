@@ -18,7 +18,10 @@ SQL parameters or request data; the redirect still uses the previously retrieved
 destination. Counts can therefore underreport during failures. Lookup failures
 are not treated as analytics failures. Redirect responses retain `no-store`.
 
-Analytics queries, dashboard charts, and redirect caching are not implemented yet.
+Link listing and update responses include `total_clicks`; newly created links
+return zero. Listing counts events for the requested page in one grouped query,
+after selecting the owner's links. No separate analytics endpoint is needed.
+Daily trends and charts are out of scope. Redirect caching is not implemented yet.
 Future server-side cache hits must still record clicks.
 
 ## Local migration and checks (PowerShell)

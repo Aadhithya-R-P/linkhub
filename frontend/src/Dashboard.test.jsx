@@ -11,7 +11,7 @@ vi.mock('./links.js', async (importOriginal) => {
 })
 beforeEach(() => vi.resetAllMocks())
 const user = { email: 'reader@example.com', display_name: 'Reader' }
-const link = (id, extra = {}) => ({ id, short_code: String(id), destination_url: `https://example.com/${id}`, is_active: true, expires_at: null, ...extra })
+const link = (id, extra = {}) => ({ id, short_code: String(id), destination_url: `https://example.com/${id}`, is_active: true, expires_at: null, total_clicks: 0, ...extra })
 
 test('creation resets an expanded list and uses the new first-page cursor', async () => {
   links.list.mockResolvedValueOnce({ items: [link(30)], next_before_id: 30 })
@@ -150,7 +150,7 @@ test('StrictMode replay does not duplicate displayed links', async () => {
 test('editing replaces a row, deleting removes it, and pagination keeps its cursor', async () => {
   links.list.mockResolvedValueOnce({ items: [link(30)], next_before_id: 30 })
     .mockResolvedValueOnce({ items: [link(20)], next_before_id: null })
-  links.update.mockResolvedValue(link(30, { destination_url: 'https://changed.com/', is_active: false }))
+  links.update.mockResolvedValue(link(30, { destination_url: 'https://changed.com/', is_active: false, total_clicks: 3 }))
   links.delete.mockResolvedValue(undefined)
   const interaction = userEvent.setup()
   render(<Dashboard user={user} onLogout={vi.fn()} onSessionExpired={vi.fn()} />)
@@ -161,6 +161,7 @@ test('editing replaces a row, deleting removes it, and pagination keeps its curs
   await interaction.click(row.getByRole('checkbox'))
   await interaction.click(row.getByRole('button', { name: 'Save' }))
   expect(await row.findByText('https://changed.com/')).toBeInTheDocument()
+  expect(row.getByText('3 clicks')).toBeInTheDocument()
   expect(row.getByText('Disabled')).toBeInTheDocument()
   expect(links.update).toHaveBeenCalledWith(30, { destination_url: 'https://changed.com/', is_active: false })
   await interaction.click(row.getByRole('button', { name: 'Delete' }))

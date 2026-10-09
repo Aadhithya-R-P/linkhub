@@ -8,12 +8,17 @@ vi.mock('./links.js', async (importOriginal) => ({
   ...await importOriginal(), links: { update: vi.fn(), delete: vi.fn() },
 }))
 beforeEach(() => vi.resetAllMocks())
-const link = { id: 30, short_code: 'u', destination_url: 'https://example.com/', is_active: true, expires_at: null }
+const link = { id: 30, short_code: 'u', destination_url: 'https://example.com/', is_active: true, expires_at: null, total_clicks: 0 }
 function setup(overrides = {}) {
   const callbacks = { onPendingChange: vi.fn(), onUpdated: vi.fn(), onDeleted: vi.fn(), onSessionExpired: vi.fn() }
   render(<ul><LinkItem link={{ ...link, ...overrides }} disabled={false} {...callbacks} /></ul>)
   return callbacks
 }
+
+test.each([[0, '0 clicks'], [1, '1 click'], [42, '42 clicks']])('displays total %s', (total_clicks, label) => {
+  setup({ total_clicks })
+  expect(screen.getByText(label, { exact: true })).toBeInTheDocument()
+})
 
 test('cancel discards edits and deletion requires explicit confirmation', async () => {
   const interaction = userEvent.setup()

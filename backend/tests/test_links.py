@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import delete, func, insert, select, update
 
-from app.models import Link, User
+from app.models import ClickEvent, Link, User
 from app.short_codes import MAX_LINK_ID, encode_link_id
 
 
@@ -41,7 +41,8 @@ def test_create_link_persists_owner_and_defaults(link_owner):
     response = client.post("/api/links", json={"destination_url": destination}, headers=headers)
     assert response.status_code == 201
     body = response.json()
-    assert set(body) == {"id", "short_code", "destination_url", "created_at", "is_active", "expires_at"}
+    assert set(body) == {"id", "short_code", "destination_url", "created_at", "is_active", "expires_at", "total_clicks"}
+    assert body["total_clicks"] == 0
     assert body["destination_url"] == destination
     assert body["short_code"] == encode_link_id(body["id"])
     assert body["is_active"] is True
@@ -118,6 +119,9 @@ def test_list_pagination_and_ownership(link_owner):
     ids = insert_owned_links(connection, user_id, 2)
     other_link = insert_owned_links(connection, other_id, 1)[0]
     ids += insert_owned_links(connection, user_id, 3)
+    for count, target_id in enumerate(ids + [other_link]):
+        for _ in range(count):
+            connection.execute(insert(ClickEvent).values(link_id=target_id))
     connection.execute(update(Link).where(Link.id == ids[-1]).values(is_active=False))
     connection.execute(update(Link).where(Link.id == ids[-2]).values(
         expires_at=datetime.now(timezone.utc) - timedelta(days=1),
@@ -130,7 +134,8 @@ def test_list_pagination_and_ownership(link_owner):
         page = response.json()
         assert len(page["items"]) == expected_size
         for item in page["items"]:
-            assert set(item) == {"id", "short_code", "destination_url", "created_at", "is_active", "expires_at"}
+            assert set(item) == {"id", "short_code", "destination_url", "created_at", "is_active", "expires_at", "total_clicks"}
+            assert item["total_clicks"] == ids.index(item["id"])
             assert item["short_code"] == encode_link_id(item["id"])
         seen.extend(item["id"] for item in page["items"])
         if expected_size == 2:
@@ -211,6 +216,18 @@ def test_update_destination_preserves_identity_and_changes_redirect(editable_lin
     assert redirect.headers["location"] == expected["destination_url"]
 
 
+def test_list_and_update_return_current_click_total(editable_link):
+    client, _, _, headers, original = editable_link
+    assert original["total_clicks"] == 0
+    for _ in range(2):
+        assert client.get(f"/r/{original['short_code']}", follow_redirects=False).status_code == 302
+    page = client.get("/api/links", headers=headers).json()
+    assert page["items"][0]["total_clicks"] == 2
+    response = client.patch(f"/api/links/{original['id']}", headers=headers, json={"is_active": False})
+    assert response.status_code == 200
+    assert response.json()["total_clicks"] == 2
+
+
 def test_disable_and_reenable_link(editable_link):
     client, _, _, headers, original = editable_link
     path = f"/api/links/{original['id']}"
@@ -249,7 +266,8 @@ def test_future_expiration_and_empty_patch(editable_link):
     assert client.get(f"/r/{original['short_code']}", follow_redirects=False).status_code == 302
     noop = client.patch(path, json={}, headers=headers)
     assert noop.status_code == 200
-    assert noop.json() == response.json()
+    # The intervening redirect changes analytics, even though the edit is empty.
+    assert noop.json() == {**response.json(), "total_clicks": 1}
 
 
 def test_update_missing_and_unowned_link(editable_link):
