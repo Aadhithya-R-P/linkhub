@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.models import Link
 from app.schemas.link import LinkCreate, LinkUpdate
 from app.short_codes import decode_short_code
+from app.services.clicks import record_click
 
 
 def list_links(
@@ -41,6 +42,7 @@ def delete_link(session: Session, link_id: int, user_id: int) -> bool:
 
 
 def get_redirect_destination(session: Session, short_code: str) -> str | None:
+    """Resolve an available link and record its redirect request best-effort."""
     try:
         link_id = decode_short_code(short_code)
     except ValueError:
@@ -50,7 +52,11 @@ def get_redirect_destination(session: Session, short_code: str) -> str | None:
         return None
     if link.expires_at is not None and link.expires_at <= datetime.now(timezone.utc):
         return None
-    return link.destination_url
+    # Commit/rollback expires ORM attributes. Keep the destination before recording
+    # so even a failed analytics write cannot trigger another database read.
+    destination = link.destination_url
+    record_click(session, link_id)
+    return destination
 
 
 def update_link(link_id: int, session: Session, data: LinkUpdate, user_id: int) -> Link | None:

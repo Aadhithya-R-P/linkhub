@@ -3,11 +3,12 @@ from uuid import uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, insert, update
+from sqlalchemy import delete, event, insert, select, text, update
+from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.main import app
-from app.models import Link, User
+from app.models import ClickEvent, Link, User
 from app.services import links as links_service
 from app.short_codes import MAX_LINK_ID, decode_short_code, encode_link_id
 
@@ -87,6 +88,58 @@ def test_unavailable_links_return_same_404(redirect_link, state):
     assert response.json() == {"detail": "Link not found"}
     assert response.headers["cache-control"] == "no-store"
     assert "location" not in response.headers
+    assert connection.execute(select(ClickEvent.id).where(ClickEvent.link_id == link_id)).all() == []
+
+
+def test_each_successful_get_records_a_timestamped_click(redirect_link):
+    client, connection, link_id, _ = redirect_link
+    path = f"/r/{encode_link_id(link_id)}"
+    for _ in range(2):
+        assert client.get(path, follow_redirects=False).status_code == 302
+    rows = connection.execute(select(ClickEvent).where(ClickEvent.link_id == link_id)).all()
+    assert len(rows) == 2
+    assert rows[0].id != rows[1].id
+    assert all(row.clicked_at.tzinfo is not None for row in rows)
+    assert client.head(path).status_code == 405
+    assert len(connection.execute(select(ClickEvent.id).where(ClickEvent.link_id == link_id)).all()) == 2
+
+
+def test_analytics_database_failure_rolls_back_but_still_redirects(redirect_link, caplog):
+    client, connection, link_id, destination = redirect_link
+
+    def fail_insert(mapper, target_connection, target):
+        # A real PostgreSQL error aborts the transaction until rollback.
+        target_connection.execute(text("SELECT 1 / 0"))
+
+    event.listen(ClickEvent, "before_insert", fail_insert)
+    try:
+        response = client.get(f"/r/{encode_link_id(link_id)}", follow_redirects=False)
+    finally:
+        event.remove(ClickEvent, "before_insert", fail_insert)
+    assert response.status_code == 302
+    assert response.headers["location"] == destination
+    assert response.headers["cache-control"] == "no-store"
+    assert connection.execute(select(ClickEvent.id).where(ClickEvent.link_id == link_id)).all() == []
+    assert "Click event could not be recorded" in caplog.text
+    assert "SELECT 1 / 0" not in caplog.text
+    assert destination not in caplog.text
+    # Recording recovers on the next request.
+    assert client.get(f"/r/{encode_link_id(link_id)}", follow_redirects=False).status_code == 302
+    assert len(connection.execute(select(ClickEvent.id).where(ClickEvent.link_id == link_id)).all()) == 1
+
+
+def test_hard_delete_cascades_only_its_click_events(redirect_link):
+    client, connection, link_id, _ = redirect_link
+    owner = connection.execute(select(Link.user_id).where(Link.id == link_id)).scalar_one()
+    other_id = connection.execute(insert(Link).values(
+        user_id=owner, destination_url="https://example.org/",
+    ).returning(Link.id)).scalar_one()
+    for target_id in (link_id, other_id):
+        assert client.get(f"/r/{encode_link_id(target_id)}", follow_redirects=False).status_code == 302
+    with Session(bind=connection, join_transaction_mode="create_savepoint") as session:
+        assert links_service.delete_link(session, link_id, owner)
+    assert connection.execute(select(ClickEvent.id).where(ClickEvent.link_id == link_id)).all() == []
+    assert len(connection.execute(select(ClickEvent.id).where(ClickEvent.link_id == other_id)).all()) == 1
 
 
 @pytest.mark.parametrize("offset, expected_status", [(-1, 404), (0, 404), (1, 302)])
