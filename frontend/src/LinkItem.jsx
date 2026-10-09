@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { links, SessionExpiredError } from './links.js'
 import CopyLink from './CopyLink.jsx'
 
@@ -14,8 +14,31 @@ export default function LinkItem({ link, disabled, onPendingChange, onUpdated, o
   const [mode, setMode] = useState('view')
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
+  const [now, setNow] = useState(Date.now)
+  const editButton = useRef(null)
+  const deleteButton = useRef(null)
+  const destinationInput = useRef(null)
+  const deleteCancel = useRef(null)
+  const focusAfterChange = useRef(null)
+  const expiration = link.expires_at ? new Date(link.expires_at).getTime() : null
+  const expired = expiration !== null && expiration <= now
+
+  useEffect(() => {
+    if (expiration === null || expiration <= now) return
+    const timer = setTimeout(() => setNow(Date.now()), Math.min(Math.max(expiration - Date.now(), 0), 2147483647))
+    return () => clearTimeout(timer)
+  }, [expiration, now])
+
+  useEffect(() => {
+    if (pending || disabled) return
+    focusAfterChange.current?.current?.focus()
+    focusAfterChange.current = null
+  }, [mode, pending, disabled])
 
   function changeMode(nextMode) {
+    focusAfterChange.current = nextMode === 'edit' ? destinationInput
+      : nextMode === 'delete' ? deleteCancel
+      : mode === 'delete' ? deleteButton : editButton
     setError('')
     setMode(nextMode)
   }
@@ -43,7 +66,7 @@ export default function LinkItem({ link, disabled, onPendingChange, onUpdated, o
       }
       const updated = await links.update(link.id, changes)
       onUpdated(updated)
-      setMode('view')
+      changeMode('view')
     } catch (failure) {
       if (failure instanceof SessionExpiredError) onSessionExpired()
       else setError(failure.message)
@@ -74,20 +97,21 @@ export default function LinkItem({ link, disabled, onPendingChange, onUpdated, o
     <div className="link-heading">
       <code>{link.short_code}</code>
       <span className={link.is_active ? 'badge' : 'badge disabled'}>{link.is_active ? 'Enabled' : 'Disabled'}</span>
+      {expired && <span className="badge expired">Expired</span>}
     </div>
     <CopyLink shortCode={link.short_code} />
     <p className="destination">{link.destination_url}</p>
     <p className="muted">{link.total_clicks} {link.total_clicks === 1 ? 'click' : 'clicks'}</p>
-    <p className="muted">{link.expires_at ? `Expires: ${new Date(link.expires_at).toLocaleString()}` : 'No expiration'}</p>
+    <p className="muted">{link.expires_at ? `${expired ? 'Expired on' : 'Expires'}: ${new Date(link.expires_at).toLocaleString()}` : 'No expiration'}</p>
 
     {mode === 'view' && <div className="link-actions">
-      <button disabled={disabled} onClick={() => changeMode('edit')}>Edit</button>
-      <button className="danger" disabled={disabled} onClick={() => changeMode('delete')}>Delete</button>
+      <button ref={editButton} aria-label={`Edit link ${link.short_code}`} disabled={disabled} onClick={() => changeMode('edit')}>Edit</button>
+      <button ref={deleteButton} aria-label={`Delete link ${link.short_code}`} className="danger" disabled={disabled} onClick={() => changeMode('delete')}>Delete</button>
     </div>}
     {mode === 'edit' && <form onSubmit={save} aria-label={`Edit link ${link.short_code}`} aria-busy={pending}>
       <fieldset disabled={pending || disabled}>
         <label htmlFor={`destination-${link.id}`}>Destination URL</label>
-        <input id={`destination-${link.id}`} name="destination_url" type="url" required maxLength={2083} defaultValue={link.destination_url} />
+        <input ref={destinationInput} id={`destination-${link.id}`} name="destination_url" type="url" required maxLength={2083} defaultValue={link.destination_url} />
         <label className="checkbox-label">
           <input name="is_active" type="checkbox" defaultChecked={link.is_active} /> Enabled
         </label>
@@ -104,7 +128,7 @@ export default function LinkItem({ link, disabled, onPendingChange, onUpdated, o
       <p>Permanently delete this link? Its short URL will stop working.</p>
       <div className="link-actions">
         <button className="danger" disabled={pending || disabled} onClick={remove}>{pending ? 'Deleting…' : 'Confirm delete'}</button>
-        <button disabled={pending || disabled} onClick={() => changeMode('view')}>Cancel</button>
+        <button ref={deleteCancel} disabled={pending || disabled} onClick={() => changeMode('view')}>Cancel</button>
       </div>
     </div>}
     {error && <p role="alert" className="errors">{error}</p>}

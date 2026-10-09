@@ -62,6 +62,10 @@ The form calls `LinksClient.create()`. After success, it clears the input and re
 
 ## Editing and deleting links
 
+Keyboard focus moves into the edit form and returns to its Edit button after saving or canceling. Delete confirmation initially focuses Cancel; canceling returns to Delete, and successful deletion focuses the list heading and announces the removed link. Row actions identify their short code for screen readers, and short links announce that they open a new tab.
+
+Expired links show a separate Expired badge and "Expired on" date, while Enabled/Disabled continues to reflect the saved setting. A timer updates the badge when the expiration time passes while the page is open. This display uses the browser clock; the backend remains responsible for enforcing expiration. Narrow mobile screens use reduced card padding.
+
 Each link card shows its total recorded clicks. Counts refresh when the list loads
 or the page reloads, and after saving an edit. These count redirect requests,
 including repeat visits, bots, and previews, not unique people. There is no separate

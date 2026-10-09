@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { links, SessionExpiredError } from './links.js'
 import CopyLink from './CopyLink.jsx'
 import LinkItem from './LinkItem.jsx'
@@ -15,6 +15,16 @@ export default function Dashboard({ user, onLogout, onSessionExpired }) {
   const [createdLink, setCreatedLink] = useState(null)
 
   const [mutating, setMutating] = useState(false)
+  const listHeading = useRef(null)
+  const focusAfterDelete = useRef(false)
+  const [deleteMessage, setDeleteMessage] = useState('')
+
+  useEffect(() => {
+    if (focusAfterDelete.current && !mutating) {
+      listHeading.current?.focus()
+      focusAfterDelete.current = false
+    }
+  }, [items, mutating])
 
   function updateLink(updated) {
     setItems((previous) => previous.map((link) => link.id === updated.id ? updated : link))
@@ -22,6 +32,8 @@ export default function Dashboard({ user, onLogout, onSessionExpired }) {
   }
 
   function deleteLink(id) {
+    focusAfterDelete.current = true
+    setDeleteMessage(`Link ${items.find((link) => link.id === id)?.short_code || id} deleted.`)
     setItems((previous) => previous.filter((link) => link.id !== id))
     setCreatedLink((previous) => previous?.id === id ? null : previous)
   }
@@ -104,7 +116,8 @@ export default function Dashboard({ user, onLogout, onSessionExpired }) {
     </header>
     <main className="dashboard">
       <p className="eyebrow">YOUR COLLECTION</p>
-      <h1>Your links</h1>
+      <h1 ref={listHeading} tabIndex={-1}>Your links</h1>
+      <p role="status" className="sr-only">{deleteMessage}</p>
       <p className="muted">Welcome, {user.display_name || 'link keeper'}. <span>{user.email}</span></p>
       <p className="muted">Newest first. Disabled and expired links remain here for reference.</p>
 

@@ -9,6 +9,7 @@ test('copies the full same-origin short URL and reports success', async () => {
   render(<CopyLink shortCode="2B" />)
   const url = `${window.location.origin}/r/2B`
   expect(screen.getByRole('link')).toHaveAttribute('href', url)
+  expect(screen.getByRole('link')).toHaveAccessibleName(`${url} (opens in a new tab)`)
   await user.click(screen.getByRole('button', { name: 'Copy short URL 2B' }))
   expect(write).toHaveBeenCalledWith(url)
   expect(await screen.findByRole('status')).toHaveTextContent('Copied!')

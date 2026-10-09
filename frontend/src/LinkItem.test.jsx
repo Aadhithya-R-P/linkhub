@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, test, vi } from 'vitest'
 import LinkItem from './LinkItem.jsx'
@@ -20,17 +20,47 @@ test.each([[0, '0 clicks'], [1, '1 click'], [42, '42 clicks']])('displays total 
   expect(screen.getByText(label, { exact: true })).toBeInTheDocument()
 })
 
+test('keyboard focus follows edit, save, and delete cancellation', async () => {
+  links.update.mockResolvedValue(link)
+  setup()
+  const interaction = userEvent.setup()
+  await interaction.click(screen.getByRole('button', { name: 'Edit link u' }))
+  expect(screen.getByLabelText('Destination URL')).toHaveFocus()
+  await interaction.click(screen.getByRole('button', { name: 'Cancel' }))
+  expect(screen.getByRole('button', { name: 'Edit link u' })).toHaveFocus()
+  await interaction.keyboard('{Enter}')
+  await interaction.click(screen.getByRole('button', { name: 'Save' }))
+  expect(screen.getByRole('button', { name: 'Edit link u' })).toHaveFocus()
+  await interaction.click(screen.getByRole('button', { name: 'Delete link u' }))
+  expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus()
+  await interaction.keyboard('{Enter}')
+  expect(screen.getByRole('button', { name: 'Delete link u' })).toHaveFocus()
+})
+
+test('marks a link expired as time passes while retaining enabled status', () => {
+  vi.useFakeTimers()
+  try {
+    vi.setSystemTime(new Date('2030-01-01T00:00:00Z'))
+    setup({ expires_at: '2030-01-01T00:00:01Z' })
+    expect(screen.queryByText('Expired', { exact: true })).not.toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(1000))
+    expect(screen.getByText('Expired', { exact: true })).toBeInTheDocument()
+    expect(screen.getByText('Enabled', { exact: true })).toBeInTheDocument()
+    expect(screen.getByText(/Expired on:/)).toBeInTheDocument()
+  } finally { vi.useRealTimers() }
+})
+
 test('cancel discards edits and deletion requires explicit confirmation', async () => {
   const interaction = userEvent.setup()
   setup()
-  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  await interaction.click(screen.getByRole('button', { name: /^Edit link / }))
   await interaction.clear(screen.getByLabelText('Destination URL'))
   await interaction.type(screen.getByLabelText('Destination URL'), 'https://changed.com/')
   await interaction.click(screen.getByRole('button', { name: 'Cancel' }))
-  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  await interaction.click(screen.getByRole('button', { name: /^Edit link / }))
   expect(screen.getByLabelText('Destination URL')).toHaveValue(link.destination_url)
   await interaction.click(screen.getByRole('button', { name: 'Cancel' }))
-  await interaction.click(screen.getByRole('button', { name: 'Delete' }))
+  await interaction.click(screen.getByRole('button', { name: /^Delete link / }))
   expect(screen.getByText(/Permanently delete/)).toBeInTheDocument()
   await interaction.click(screen.getByRole('button', { name: 'Cancel' }))
   expect(links.update).not.toHaveBeenCalled()
@@ -42,7 +72,7 @@ test.each([null, '2027-01-01T00:00:00Z'])('saves a changed local expiration as U
   links.update.mockResolvedValue(saved)
   const callbacks = setup({ expires_at })
   const interaction = userEvent.setup()
-  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  await interaction.click(screen.getByRole('button', { name: /^Edit link / }))
   fireEvent.change(screen.getByLabelText('Expiration'), { target: { value: '2027-07-15T18:45' } })
   await interaction.click(screen.getByRole('button', { name: 'Save' }))
   expect(links.update).toHaveBeenCalledWith(link.id, {
@@ -56,7 +86,7 @@ test('prefills local time and omits unchanged expiration to preserve sub-minute 
   links.update.mockResolvedValue({ ...link, expires_at })
   setup({ expires_at })
   const interaction = userEvent.setup()
-  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  await interaction.click(screen.getByRole('button', { name: /^Edit link / }))
   expect(screen.getByLabelText('Expiration')).toHaveValue('2027-01-02T00:15')
   await interaction.click(screen.getByRole('button', { name: 'Save' }))
   expect(links.update).toHaveBeenCalledWith(link.id, { destination_url: link.destination_url, is_active: true })
@@ -66,7 +96,7 @@ test('clears existing expiration with null', async () => {
   links.update.mockResolvedValue(link)
   setup({ expires_at: '2027-01-01T00:00:00Z' })
   const interaction = userEvent.setup()
-  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  await interaction.click(screen.getByRole('button', { name: /^Edit link / }))
   fireEvent.change(screen.getByLabelText('Expiration'), { target: { value: '' } })
   await interaction.click(screen.getByRole('button', { name: 'Save' }))
   expect(links.update).toHaveBeenCalledWith(link.id, {
@@ -78,14 +108,14 @@ test('past expiration is allowed, retained after failure, and discarded on cance
   links.update.mockRejectedValue(new Error('Unable to confirm the update'))
   setup()
   const interaction = userEvent.setup()
-  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  await interaction.click(screen.getByRole('button', { name: /^Edit link / }))
   fireEvent.change(screen.getByLabelText('Expiration'), { target: { value: '2000-01-01T12:00' } })
   await interaction.click(screen.getByRole('button', { name: 'Save' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Unable to confirm')
   expect(screen.getByLabelText('Expiration')).toHaveValue('2000-01-01T12:00')
   expect(links.update).toHaveBeenCalledWith(link.id, expect.objectContaining({ expires_at: new Date(2000, 0, 1, 12).toISOString() }))
   await interaction.click(screen.getByRole('button', { name: 'Cancel' }))
-  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  await interaction.click(screen.getByRole('button', { name: /^Edit link / }))
   expect(screen.getByLabelText('Expiration')).toHaveValue('')
 })
 
@@ -94,7 +124,7 @@ test('failed save retains entered fields and can be retried', async () => {
     .mockResolvedValueOnce({ ...link, is_active: false })
   const interaction = userEvent.setup()
   const callbacks = setup()
-  await interaction.click(screen.getByRole('button', { name: 'Edit' }))
+  await interaction.click(screen.getByRole('button', { name: /^Edit link / }))
   await interaction.click(screen.getByRole('checkbox'))
   await interaction.click(screen.getByRole('button', { name: 'Save' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Invalid destination')
@@ -110,7 +140,7 @@ test.each(['update', 'delete'])('%s handles session expiry and disables repeated
   links[method].mockReturnValue(new Promise((resolve, fail) => { reject = fail }))
   const interaction = userEvent.setup()
   const callbacks = setup()
-  await interaction.click(screen.getByRole('button', { name: method === 'update' ? 'Edit' : 'Delete' }))
+  await interaction.click(screen.getByRole('button', { name: method === 'update' ? /^Edit link / : /^Delete link / }))
   await interaction.click(screen.getByRole('button', { name: method === 'update' ? 'Save' : 'Confirm delete' }))
   const button = screen.getByRole('button', { name: method === 'update' ? 'Saving…' : 'Deleting…' })
   expect(button).toBeDisabled()
@@ -126,7 +156,7 @@ test('failed deletion leaves the link and confirmation available', async () => {
   links.delete.mockRejectedValue(new Error('Unable to confirm deletion'))
   const interaction = userEvent.setup()
   const callbacks = setup()
-  await interaction.click(screen.getByRole('button', { name: 'Delete' }))
+  await interaction.click(screen.getByRole('button', { name: /^Delete link / }))
   await interaction.click(screen.getByRole('button', { name: 'Confirm delete' }))
   expect(await screen.findByRole('alert')).toHaveTextContent('Unable to confirm deletion')
   expect(screen.getByText(link.destination_url)).toBeInTheDocument()

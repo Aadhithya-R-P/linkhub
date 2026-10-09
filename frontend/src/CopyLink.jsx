@@ -20,7 +20,7 @@ export default function CopyLink({ shortCode }) {
   }
 
   return <div className="copy-link">
-    <a href={shortUrl} target="_blank" rel="noopener noreferrer">{shortUrl}</a>
+    <a href={shortUrl} target="_blank" rel="noopener noreferrer">{shortUrl}{' '}<span className="sr-only">(opens in a new tab)</span></a>
     <button type="button" disabled={pending} onClick={copy} aria-label={`Copy short URL ${shortCode}`}>{pending ? 'Copying…' : 'Copy'}</button>
     {message && <span role="status">{message}</span>}
   </div>
