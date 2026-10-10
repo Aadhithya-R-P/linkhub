@@ -1,7 +1,21 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { expect, test, vi } from 'vitest'
+import { afterEach, expect, test, vi } from 'vitest'
 import CopyLink from './CopyLink.jsx'
+
+afterEach(() => vi.unstubAllEnvs())
+
+test('opens and copies the configured backend URL', async () => {
+  vi.stubEnv('VITE_PUBLIC_BACKEND_URL', 'https://linkhub-example.onrender.com')
+  const user = userEvent.setup()
+  const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+  render(<CopyLink shortCode="2B" />)
+  const url = 'https://linkhub-example.onrender.com/r/2B'
+  expect(screen.getByRole('link')).toHaveAttribute('href', url)
+  await user.click(screen.getByRole('button'))
+  expect(write).toHaveBeenCalledWith(url)
+  write.mockRestore()
+})
 
 test('copies the full same-origin short URL and reports success', async () => {
   const user = userEvent.setup()

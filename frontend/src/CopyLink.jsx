@@ -3,7 +3,7 @@ import { useState } from 'react'
 export default function CopyLink({ shortCode }) {
   const [message, setMessage] = useState('')
   const [pending, setPending] = useState(false)
-  const shortUrl = new URL(`/r/${shortCode}`, window.location.origin).href
+  const shortUrl = new URL(`/r/${shortCode}`, import.meta.env.VITE_PUBLIC_BACKEND_URL || window.location.origin).href
 
   async function copy() {
     if (pending) return
