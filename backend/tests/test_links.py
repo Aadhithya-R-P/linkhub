@@ -342,7 +342,9 @@ def test_delete_removes_row_listing_and_redirect(editable_link, state):
     assert [item["id"] for item in page["items"]] == [sibling]
     redirect = client.get(redirect_path, follow_redirects=False)
     assert redirect.status_code == 404
-    assert redirect.json() == {"detail": "Link not found"}
+    assert redirect.headers["content-type"].startswith("text/html")
+    assert "<h1>This link is unavailable</h1>" in redirect.text
+    assert "location" not in redirect.headers
     assert redirect.headers["cache-control"] == "no-store"
     assert client.patch(f"/api/links/{link_id}", json={"is_active": True}, headers=headers).status_code == 404
 
