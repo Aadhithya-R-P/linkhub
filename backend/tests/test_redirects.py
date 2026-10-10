@@ -43,7 +43,8 @@ def test_malformed_redirect_does_not_query_database(code):
         with TestClient(app) as client:
             response = client.get(f"/r/{code}", follow_redirects=False)
         assert response.status_code == 404
-        assert response.json() == {"detail": "Link not found"}
+        assert response.headers["content-type"].startswith("text/html")
+        assert "This link is unavailable" in response.text
         assert response.headers["cache-control"] == "no-store"
         assert "location" not in response.headers
     finally:
@@ -85,7 +86,8 @@ def test_unavailable_links_return_same_404(redirect_link, state):
         ))
     response = client.get(f"/r/{encode_link_id(link_id)}", follow_redirects=False)
     assert response.status_code == 404
-    assert response.json() == {"detail": "Link not found"}
+    assert response.headers["content-type"].startswith("text/html")
+    assert "This link is unavailable" in response.text
     assert response.headers["cache-control"] == "no-store"
     assert "location" not in response.headers
     assert connection.execute(select(ClickEvent.id).where(ClickEvent.link_id == link_id)).all() == []
