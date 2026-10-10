@@ -68,7 +68,7 @@ a list item, and `${{ ... }}` is an expression evaluated by GitHub.
 | `REDIS_URL` | Point to temporary Redis, not Upstash. |
 | `LINKHUB_TEST_DB: '1'` | Enable existing PostgreSQL tests that otherwise skip. |
 | `LINKHUB_TEST_REDIS: '1'` | Enable the real Redis integration test. |
-| `uses: astral-sh/setup-uv@v9` | Install uv, the backend dependency and environment manager. |
+| `uses: astral-sh/setup-uv@v10.3.0` | Install uv using this verified action release, the backend dependency and environment manager. |
 | `version: '0.13.0'` | Select the uv tool version, independently of the action version. |
 | `python-version: '3.13'` | Select Python 3.13 for the backend. |
 | `uv sync --locked --dev` | Create the virtual environment from uv.lock, include development dependencies such as pytest, and reject an outdated lockfile. |
