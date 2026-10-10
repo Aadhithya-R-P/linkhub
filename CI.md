@@ -74,7 +74,7 @@ a list item, and `${{ ... }}` is an expression evaluated by GitHub.
 | `uv sync --locked --dev` | Create the virtual environment from uv.lock, include development dependencies such as pytest, and reject an outdated lockfile. |
 | `uv run --locked alembic upgrade head` | Create the schema in empty CI PostgreSQL by applying the full migration chain. |
 | `uv run --locked alembic check` | Detect model/schema differences that would require a generated migration. It does not create a migration file. |
-| `uv run --locked pytest -q -ra` | Run backend tests in that environment; -q reduces chatter and -ra reports non-passing outcomes including skips. |
+| `uv run --locked python -m pytest -q -ra` | Run pytest through Python so the backend working directory is on the import path and `app` can be imported; -q reduces chatter and -ra reports non-passing outcomes including skips. |
 
 The database/cache containers are discarded after the job. Tests can create and
 delete data there without touching production. GitHub does not receive your local
