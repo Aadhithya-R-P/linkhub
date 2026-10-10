@@ -42,7 +42,7 @@ Refresh coordination is limited to one tab. Multiple tabs share the cookie but n
 
 The signed-in dashboard uses `LinksClient.list()` through `AuthClient.apiFetch()`. It initially requests 20 links, then appends older pages using `next_before_id`. A failed page keeps existing items and can be retried at the same cursor. Reloading starts pagination over. Disabled and expired links remain visible; the enabled badge reflects `is_active`, while the expiration date is displayed separately in the browser's local timezone.
 
-A final 401 after authentication recovery clears the local session and returns to login. Late dashboard results are ignored after unmount. Short URLs use `VITE_PUBLIC_BACKEND_URL` when configured, otherwise the current frontend origin. Vite forwards `/r/` to FastAPI during development; production short URLs point directly to Render. Vercel proxies `/api` using `vercel.json`, whose placeholder must be replaced before deployment. See the root `DEPLOYMENT.md` checklist. Clipboard access requires a supported secure context (HTTPS or localhost). If copying fails, the URL remains visible for manual copying.
+A final 401 after authentication recovery clears the local session and returns to login. Late dashboard results are ignored after unmount. Short URLs use `VITE_PUBLIC_BACKEND_URL` when configured, otherwise the current frontend origin. Vite forwards `/r/` to FastAPI during development; production short URLs point directly to Render. Vercel proxies `/api` using `vercel.json`, configured with the Render backend address. See the root `DEPLOYMENT.md` checklist. Clipboard access requires a supported secure context (HTTPS or localhost). If copying fails, the URL remains visible for manual copying.
 
 From this directory:
 

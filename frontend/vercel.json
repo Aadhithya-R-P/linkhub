@@ -1,5 +1,5 @@
 {
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://REPLACE-WITH-YOUR-SERVICE.onrender.com/api/:path*" }
+    { "source": "/api/:path*", "destination": "https://linkhub-api-mtu1.onrender.com/api/:path*" }
   ]
 }

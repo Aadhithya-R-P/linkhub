@@ -1,8 +1,8 @@
 # LinkHub deployment checklist
 
-Configuration is prepared locally. The Vercel rewrite contains a placeholder that
-must be replaced before the API can work on Vercel. Cloud resources are configured
-separately using the steps below.
+The Vercel API rewrite points to https://linkhub-api-mtu1.onrender.com.
+The frontend is https://linkhub-five-theta.vercel.app. Cloud resources are
+configured separately using the steps below.
 
 ## 1. Create the database and cache
 
@@ -44,7 +44,7 @@ not credentials. Do not paste actual secrets into chat or Git.
 | DB_USER | Your Neon role |
 | DB_PASSWORD | Your Neon password |
 | DB_SSLMODE | verify-full |
-| DB_SSLROOTCERT | system |
+| DB_SSLROOTCERT | /etc/ssl/certs/ca-certificates.crt |
 | JWT_SECRET | A stable cryptographically random secret, at least 32 characters |
 | REFRESH_COOKIE_SECURE | true |
 | AUTH_ALLOWED_ORIGINS | ["https://YOUR-PROJECT.vercel.app"] |
@@ -52,9 +52,9 @@ not credentials. Do not paste actual secrets into chat or Git.
 | REDIS_URL | Your private Upstash rediss:// URL |
 
 Use a password manager's random generator for JWT_SECRET. Keep the same secret
-across restarts. DB_SSLROOTCERT=system requires a libpq version supporting system
-roots; the deployed psycopg binary must support it. Do not disable certificate
-verification to work around TLS failures.
+across restarts. Use the explicit Linux CA bundle path above on Render:
+DB_SSLROOTCERT=system failed certificate verification with this deployment's
+binary driver. Keep DB_SSLMODE=verify-full to verify the certificate and hostname.
 
 Render commands below run in its Linux service root (`backend`), not PowerShell:
 
@@ -80,14 +80,14 @@ database, Redis, or authentication are working.
 
 ## 4. Connect Vercel to Render
 
-Replace `https://REPLACE-WITH-YOUR-SERVICE.onrender.com` in
-`frontend/vercel.json` with the actual Render origin. Keep `/api/:path*` appended.
+The Render origin in `frontend/vercel.json` is configured for this deployment.
+If the backend address changes, update it and keep `/api/:path*` appended.
 This is a literal URL: Vercel JSON does not substitute a Vite environment variable.
 
 In Vercel's production environment settings set:
 
 ```text
-VITE_PUBLIC_BACKEND_URL=https://YOUR-SERVICE.onrender.com
+VITE_PUBLIC_BACKEND_URL=https://linkhub-api-mtu1.onrender.com
 ```
 
 This URL is public and is embedded into the frontend build. Never put secrets in
