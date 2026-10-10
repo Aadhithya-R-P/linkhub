@@ -118,8 +118,10 @@ CORS or weaken origin checks to hide a proxy configuration error.
   share the cookie or Authorization header values.
 - Check service logs for failures without sharing credentials or connection URLs.
 
-Rate limiting and GitHub Actions are separate pending work. This checklist is for
-an initial deployment, not a claim that those features are complete.
+GitHub Actions CI is defined in `.github/workflows/ci.yml`; see `CI.md` for the
+walkthrough. It runs checks, not deployments. A passing workflow does not by itself
+block merges or gate Vercel deployments. Configure required checks and deployment
+gates separately. Rate limiting remains pending.
 
 ## References
 

@@ -1,0 +1,99 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend tests and build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run frontend tests
+        run: npm test
+      - name: Build frontend
+        run: npm run build
+
+  backend:
+    name: Backend tests and migrations
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: linkhub_ci
+          POSTGRES_USER: linkhub_ci
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U linkhub_ci -d linkhub_ci"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      ENVIRONMENT: development
+      DB_HOST: 127.0.0.1
+      DB_PORT: '5432'
+      DB_NAME: linkhub_ci
+      DB_USER: linkhub_ci
+      DB_PASSWORD: ci-only-password
+      DB_SSLMODE: disable
+      JWT_SECRET: ci-only-signing-key-never-use-in-production
+      REFRESH_COOKIE_SECURE: 'false'
+      REDIS_URL: redis://127.0.0.1:6379/0
+      LINKHUB_TEST_DB: '1'
+      LINKHUB_TEST_REDIS: '1'
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@v9
+        with:
+          version: '0.13.0'
+          python-version: '3.13'
+      - name: Install locked dependencies
+        run: uv sync --locked --dev
+      - name: Apply migrations to disposable PostgreSQL
+        run: uv run --locked alembic upgrade head
+      - name: Check models match migrations
+        run: uv run --locked alembic check
+      - name: Run backend tests including PostgreSQL and Redis
+        run: uv run --locked pytest -q -ra
