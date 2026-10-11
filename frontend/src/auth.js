@@ -1,3 +1,5 @@
+import { RequestCooldowns } from './requestCooldowns.js'
+
 // Browser requests by default; tests can supply a fake request function.
 function browserRequest(url, options) {
   return fetch(url, options)
@@ -15,6 +17,7 @@ export class RegistrationError extends Error {
 export class AuthClient {
   constructor(request = browserRequest) {
     this.request = request
+    this.cooldowns = new RequestCooldowns()
 
     // Instance fields, not React state. The browser manages the refresh cookie.
     this.accessToken = null
@@ -59,12 +62,14 @@ export class AuthClient {
 
   // A final unauthorized response ends the local UI session.
   clearLocalSession() {
+    this.cooldowns = new RequestCooldowns()
     this.sessionVersion += 1
     this.accessToken = null
   }
 
   // LOGIN: send credentials, remember the token, then load the user.
   async login(email, password) {
+    this.cooldowns = new RequestCooldowns()
     if (this.pendingLogout) {
       await this.pendingLogout
     }
@@ -157,7 +162,9 @@ export class AuthClient {
     return this.sendWithToken(path, options, retryToken)
   }
 
-  sendWithToken(path, options, token) {
+  async sendWithToken(path, options, token) {
+    const mutation = path.startsWith('/api/links') && ['POST', 'PATCH', 'DELETE'].includes((options.method || 'GET').toUpperCase())
+    if (mutation) this.cooldowns.check('mutation')
     const headers = new Headers(options.headers)
     if (token) {
       headers.set('Authorization', `Bearer ${token}`)
@@ -167,7 +174,9 @@ export class AuthClient {
     const requestOptions = { ...options }
     requestOptions.headers = headers
     requestOptions.credentials = 'same-origin'
-    return this.request(path, requestOptions)
+    const response = await this.request(path, requestOptions)
+    if (mutation) this.cooldowns.observe('mutation', response)
+    return response
   }
 
   async getCurrentUser() {

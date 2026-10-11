@@ -1,4 +1,5 @@
 import { auth } from './auth.js'
+import { RequestDelayError } from './requestCooldowns.js'
 
 export class SessionExpiredError extends Error {
   constructor() {
@@ -20,7 +21,8 @@ export class LinksClient {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       })
-    } catch {
+    } catch (failure) {
+      if (failure instanceof RequestDelayError) throw failure
       throw new Error('Unable to confirm the update. Reload your links before trying again.')
     }
     if (response.status === 401) throw new SessionExpiredError()
@@ -40,7 +42,8 @@ export class LinksClient {
     let response
     try {
       response = await this.authClient.apiFetch(`/api/links/${id}`, { method: 'DELETE' })
-    } catch {
+    } catch (failure) {
+      if (failure instanceof RequestDelayError) throw failure
       throw new Error('Unable to confirm deletion. Reload your links before trying again.')
     }
     if (response.status === 401) throw new SessionExpiredError()
@@ -58,7 +61,8 @@ export class LinksClient {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ destination_url: destinationUrl }),
       })
-    } catch {
+    } catch (failure) {
+      if (failure instanceof RequestDelayError) throw failure
       throw new Error('Unable to confirm creation. Reload your links before trying again.')
     }
     if (response.status === 401) throw new SessionExpiredError()

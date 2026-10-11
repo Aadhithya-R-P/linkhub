@@ -9,11 +9,13 @@ from app.models import Link, User
 from app.schemas.link import LinkCreate, LinkPage, LinkRead, LinkUpdate
 from app.services.links import create_link, delete_link, get_click_counts, list_links, update_link
 from app.short_codes import MAX_LINK_ID, encode_link_id
+from app.rate_limit import limit_link_mutation
 
 router = APIRouter(prefix="/api/links", tags=["links"])
 
 
-@router.delete("/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{link_id}", status_code=status.HTTP_204_NO_CONTENT,
+               dependencies=[Depends(limit_link_mutation)])
 def delete_owned_link(
     link_id: Annotated[int, Path(ge=1, le=MAX_LINK_ID)],
     user: Annotated[User, Depends(get_current_user)],
@@ -54,7 +56,8 @@ def list_owned_links(
     )
 
 
-@router.post("", response_model=LinkRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=LinkRead, status_code=status.HTTP_201_CREATED,
+             dependencies=[Depends(limit_link_mutation)])
 def create(
     data: LinkCreate,
     user: Annotated[User, Depends(get_current_user)],
@@ -63,7 +66,8 @@ def create(
     link = create_link(session, data, user.id)
     return link_response(link)
 
-@router.patch("/{link_id}", response_model=LinkRead, status_code=status.HTTP_200_OK)
+@router.patch("/{link_id}", response_model=LinkRead, status_code=status.HTTP_200_OK,
+              dependencies=[Depends(limit_link_mutation)])
 def update(
     link_id: Annotated[int, Path(ge=1, le=MAX_LINK_ID)],
     data: LinkUpdate,

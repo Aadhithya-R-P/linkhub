@@ -1,5 +1,12 @@
 # LinkHub backend
 
+## Rate limiting
+
+Authenticated create/edit/delete requests share a Redis-backed limit of 60 attempts
+per user per minute. Rejections return 429 with Retry-After; Redis outages allow
+mutations to continue. Authentication, listing, logout and redirects are unrestricted.
+See `../RATE_LIMITING.md` for the policy, configuration and tests.
+
 ## Click recording
 
 Each successful `GET /r/{code}` records one row in `click_events` before returning

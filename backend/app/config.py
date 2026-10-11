@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     redis_url: SecretStr = SecretStr("redis://127.0.0.1:6379/0")
     redirect_cache_ttl_seconds: int = Field(default=30, ge=1, le=300)
     redis_timeout_seconds: float = Field(default=0.2, gt=0, le=5)
+    rate_limit_enabled: bool = True
+    rate_limit_mutation_requests: int = Field(default=60, ge=1, le=100000)
+    rate_limit_mutation_window_seconds: int = Field(default=60, ge=1, le=86400)
 
 
     # Required server-side secret; never generate a new key on each startup.
@@ -55,7 +58,7 @@ class Settings(BaseSettings):
                 raise ValueError("Production auth origins must be exact HTTPS origins without paths")
         if self.db_sslmode != "verify-full" or not self.db_sslrootcert:
             raise ValueError("Production requires verify-full database TLS and a root certificate source")
-        if self.redirect_cache_enabled and not self.redis_url.get_secret_value().startswith("rediss://"):
+        if (self.redirect_cache_enabled or self.rate_limit_enabled) and not self.redis_url.get_secret_value().startswith("rediss://"):
             raise ValueError("Production Redis requires a rediss:// TLS URL")
         return self
 

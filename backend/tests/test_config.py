@@ -29,6 +29,8 @@ def test_tls_options_reach_shared_database_url():
     {"db_sslmode": "prefer"},
     {"db_sslrootcert": None},
     {"redis_url": "redis://localhost:6379/0"},
+    {"redis_url": "redis://localhost:6379/0", "redirect_cache_enabled": False,
+     "rate_limit_enabled": True},
 ])
 def test_rejects_unsafe_production_settings(overrides):
     with pytest.raises(ValidationError):

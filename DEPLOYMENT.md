@@ -121,7 +121,10 @@ CORS or weaken origin checks to hide a proxy configuration error.
 GitHub Actions CI is defined in `.github/workflows/ci.yml`; see `CI.md` for the
 walkthrough. It runs checks, not deployments. A passing workflow does not by itself
 block merges or gate Vercel deployments. Configure required checks and deployment
-gates separately. Rate limiting remains pending.
+gates separately. Authenticated link mutations have shared Redis rate limiting;
+see `RATE_LIMITING.md` for defaults and verification. Authentication and public
+redirect rate limits remain deferred. No new environment variables are required
+for the default mutation limit.
 
 ## References
 

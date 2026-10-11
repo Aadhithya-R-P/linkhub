@@ -12,6 +12,8 @@ from app.services import links as links_service
 
 @pytest.fixture(autouse=True)
 def disable_external_cache(monkeypatch):
+    # Limiter tests opt in explicitly; ordinary fixtures must not share counters.
+    monkeypatch.setenv("RATE_LIMIT_ENABLED", "false")
     # Database fixtures roll back data; never put their rows into a real cache.
     monkeypatch.setattr(links_service, "get_redirect_cache", lambda: RedirectCache(None))
 
